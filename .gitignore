@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/*
+
+# Run configuration
+run.config
+
+# StanfordCore
+stanford-corenlp-*/*
+tmp/*
+
+# Generated files
+*.cod
+*.cl
+*.joblib
+*.out
+*.stats
+.DS_Store
