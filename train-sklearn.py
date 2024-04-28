@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+from typing import Iterable
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.naive_bayes import MultinomialNB
 import numpy as np
@@ -9,14 +10,14 @@ import numpy as np
 from joblib import dump
 
 
-def load_data(data):
-    features = []
-    labels = []
+def load_data(data: Iterable[str]):
+    features: list[dict[str, float]] = []
+    labels: list[str] = []
     for interaction in data:
         interaction = interaction.strip()
         interaction = interaction.split("\t")
         interaction_dict = {
-            feat.split("=")[0]: feat.split("=")[1] for feat in interaction[1:]
+            feat.split("=")[0]: float(feat.split("=")[1]) for feat in interaction[1:]
         }
         features.append(interaction_dict)
         labels.append(interaction[0])

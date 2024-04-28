@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 
 import sys
-from joblib import dump, load
-from sklearn.feature_extraction import DictVectorizer
+from typing import Iterable
+from joblib import load
+# from sklearn.feature_extraction import DictVectorizer
 
 
-def prepare_instances(xseq):
-    features = []
+def prepare_instances(xseq: Iterable[str]):
+    features: list[dict[str, float]] = []
     for interaction in xseq:
         token_dict = {
-            feat.split("=")[0]: feat.split("=")[1] for feat in interaction[1:]
+            feat.split("=")[0]: float(feat.split("=")[1]) for feat in interaction[1:]
         }
         features.append(token_dict)
     return features
