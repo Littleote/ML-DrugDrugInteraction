@@ -14,25 +14,29 @@ import deptree as dtree
 ## -------------------
 ## -- Convert a pair of drugs and their context in a feature vector
 
-FIRST_STOPWORD = "FIRST_STOPWORD"
-ENTITY_INBETWEEN = "ENTITY_INBETWEEN"
-ENTITIES_INBETWEEN = "ENTITIES_INBETWEEN"
-TOKENS_INBETWEEN = "TOKENS_INBETWEEN"
-SAME_TOKEN = "SAME_TOKEN"
-LOWEST_COMMON_SUBSUMER = "LOWEST_COMMON_SUBSUMER"
+FIRST_NONSTOPWORD = "first nonstop word"
+NONSTOPWORDS_INBETWEEN = "nonstop word inbetween"
+ENTITY_INBETWEEN = "any entity inbetween"
+ENTITIES_INBETWEEN = "#entities inbetween"
+TOKENS_INBETWEEN = "#tokens inbetween"
+POS_TAG_INBETWEEN = "#POS tag for each one possible"
+SAME_TOKEN = "entities are the same"
+LOWEST_COMMON_SUBSUMER = "lowest common subsumer"
 
-PARENT_SPLIT = "PARENT_SPLIT"
-PARENT_LENGTH = "PARENT_LENGTH"
-COMMON_VERB = "COMMON_VERB"
+PARENT_SPLIT = "ancestor tokens"
+PARENT_LENGTH = "#ancestor tokens"
+COMMON_VERB = "first common verb"
 
-PATH_SPLIT = "PATH_SPLIT"
-PATH_LENGTH = "PATH_LENGTH"
-PATH_JOINT = "PATH_JOINT"
+PATH_SPLIT = "graph path tokens"
+PATH_LENGTH = "#graph path tokens"
+PATH_JOINT = "joined graph path tokens"
 
 FEAT = {
-    FIRST_STOPWORD: False,
+    FIRST_NONSTOPWORD: False,
+    NONSTOPWORDS_INBETWEEN: True,
     ENTITY_INBETWEEN: False,
     ENTITIES_INBETWEEN: True,
+    POS_TAG_INBETWEEN: True,
     TOKENS_INBETWEEN: True,
     SAME_TOKEN: True,
     LOWEST_COMMON_SUBSUMER: True,
@@ -44,7 +48,12 @@ FEAT = {
     PATH_JOINT: False,
 }
 
-ENTITIES = FEAT[ENTITY_INBETWEEN] or FEAT[ENTITIES_INBETWEEN]
+INBETWEEN = (
+    FEAT[NONSTOPWORDS_INBETWEEN]
+    or FEAT[ENTITY_INBETWEEN]
+    or FEAT[ENTITIES_INBETWEEN]
+    or FEAT[POS_TAG_INBETWEEN]
+)
 PATH = FEAT[PATH_SPLIT] or FEAT[PATH_LENGTH] or FEAT[PATH_JOINT]
 PARENT = FEAT[PARENT_SPLIT] or FEAT[PARENT_LENGTH] or FEAT[COMMON_VERB]
 
@@ -71,21 +80,31 @@ def extract_features(
             word = tree.get_word(tk)
             lemma = tree.get_lemma(tk).lower()
             tag = tree.get_tag(tk)
-            feats[FIRST_STOPWORD].add(f"sw_lemma_{lemma}=1")
-            feats[FIRST_STOPWORD].add(f"sw_word_{word}=1")
-            feats[FIRST_STOPWORD].add(f"sw_POS_{tag}=1")
+            feats[FIRST_NONSTOPWORD].add(f"sw_lemma_{lemma}=1")
+            feats[FIRST_NONSTOPWORD].add(f"sw_word_{word}=1")
+            feats[FIRST_NONSTOPWORD].add(f"sw_POS_{tag}=1")
         except Exception:
             pass
 
         # feature indicating the presence of an entity in between E1 and E2
         #   ENTITY_INBETWEEN: True or False if there are entities in between
         #   ENTITIES_INBETWEEN: Total count of entities between the two tokens
-        if ENTITIES:
+        if INBETWEEN:
+            counts = {}
             eib, num_eib = False, 0
             for tk in range(tkE1 + 1, tkE2):
+                word = tree.get_word(tk)
+                lemma = tree.get_lemma(tk).lower()
+                tag = tree.get_tag(tk)
+                counts[tag] = counts.get(tag, 0) + 1
+                if not tree.is_stopword(tk):
+                    feats[NONSTOPWORDS_INBETWEEN].add(f"swib_lemma_{lemma}=1")
+                    feats[NONSTOPWORDS_INBETWEEN].add(f"swib_word_{word}=1")
                 if tree.is_entity(tk, entities):
                     eib = True
                     num_eib += 1
+            for tag, count in counts.items():
+                feats[POS_TAG_INBETWEEN].add(f"ptib_{tag}_num={count}")
             feats[ENTITY_INBETWEEN].add(f"eib_{eib}=1")
             feats[ENTITIES_INBETWEEN].add(f"eib_num={num_eib}")
 
@@ -171,7 +190,11 @@ def extract_features(
             path = f"{path1}<{lcs_lemma}_{lcs_rel}>{path2}"
             feats[PATH_JOINT].add(f"path_{path}=1")
 
-    return feats if split else set.union(*feats.values())
+    return (
+        feats
+        if split
+        else set.union(*[feat for key, feat in feats.items() if FEAT[key]])
+    )
 
 
 ## --------- MAIN PROGRAM -----------

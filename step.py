@@ -5,13 +5,19 @@ import re
 import sys
 import tempfile
 from pathlib import Path
+from typing import TextIO
 
 import numpy as np
+import pandas as pd
 import scipy as sp
 
 import predict_sklearn as predict
 import train_sklearn as train
 from evaluator import evaluate
+
+
+F1_COL = "F1-Score"
+FEAT_COL = "Used features"
 
 
 def run(X_train, y_train, classes, model_file, features):
@@ -58,6 +64,7 @@ def main(
     model_file: str,
     output_file: str,
     stats_file: str,
+    redirect: str | TextIO,
     features_names: list[str],
 ):
     with open(train_info_file, mode="r", encoding="utf-8") as train_labels:
@@ -68,9 +75,10 @@ def main(
         ids, X_test = predict.load_vectors(
             vect_template, test_ids, test_template, features_names
         )
-    used_features = []
+    used_features: list[str] = []
+    steps: list[tuple] = []
     best_f1_score = 0
-    last_change = None
+    last_change: str | None = None
     random.shuffle(features_names)
     for feature in itertools.cycle(features_names):
         if feature == last_change:
@@ -91,7 +99,7 @@ def main(
         if new_f1_score > best_f1_score:
             last_change = feature
             best_f1_score = new_f1_score
-            print(f"F1-score={best_f1_score:0<.6}% using: {', '.join(used_features)}")
+            steps.append((best_f1_score, tuple(used_features)))
             trim = "The best subset of features"
             while trim is not None:
                 trim = None
@@ -111,15 +119,17 @@ def main(
                         trim = subset
                 if trim is not None:
                     used_features = trim
-                    print(
-                        f"F1-score={best_f1_score:0<.6}% using: {', '.join(used_features)}"
-                    )
+                    steps.append((best_f1_score, tuple(used_features)))
         else:
             used_features.remove(feature)
+    df = pd.DataFrame(steps, columns=[F1_COL, FEAT_COL])
+    df[F1_COL] = df[F1_COL].apply(lambda x: f"{x:0<.6}%")
+    df[FEAT_COL] = df[FEAT_COL].apply(lambda x: ", ".join(x))
+    df.to_csv(redirect)
 
 
 if __name__ == "__main__":
-    assert len(sys.argv) > 4, f"Expected at least 4 arguments found {len(sys.argv) - 1}"
+    assert len(sys.argv) > 5, f"Expected at least 5 arguments found {len(sys.argv) - 1}"
     train_file = sys.argv[1]
     train_ids = sys.argv[2]
     train_glob = train_file.replace("{}", "*")
@@ -140,6 +150,7 @@ if __name__ == "__main__":
     test_file = sys.argv[3]
     test_ids = sys.argv[4]
     test_dir = sys.argv[5]
+    redirect = sys.argv[6] if len(sys.argv) > 6 else sys.stdout
     with tempfile.TemporaryDirectory() as tmp_dir:
         vect_file = str(Path(tmp_dir, "vectorizer_{}.joblib"))
         model_file = str(Path(tmp_dir, "model.joblib"))
@@ -155,5 +166,6 @@ if __name__ == "__main__":
             model_file=model_file,
             output_file=output_file,
             stats_file=stats_file,
+            redirect=redirect,
             features_names=features,
         )

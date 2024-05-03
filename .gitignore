@@ -15,4 +15,5 @@ tmp/*
 *.out
 *.stats
 *.png
+step.csv
 .DS_Store
