@@ -1,14 +1,16 @@
-import sys
 import glob
+import itertools
+import random
 import re
-from pathlib import Path
+import sys
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import scipy as sp
 
-import train_sklearn as train
 import predict_sklearn as predict
+import train_sklearn as train
 from evaluator import evaluate
 
 
@@ -33,11 +35,17 @@ def test(X_test, ids, model_file, data_dir, output_file, stats_file, features):
     with open(output_file, mode="w", encoding="utf-8") as stdout:
         predict.predict(model, ids, X_test, stdout)
     with open(stats_file, mode="w", encoding="utf-8") as stdout:
-        evaluate("DDI", data_dir, output_file, None, redirect=stdout, precision=4)
+        evaluate("DDI", data_dir, output_file, None, redirect=stdout, precision=10)
     with open(stats_file, mode="r", encoding="utf-8") as handler:
         f1_score = handler.readlines()[7].split("\t")[-1]
         f1_score = float(f1_score.strip(" \n\t\r%"))
     return f1_score
+
+
+def get_subsets(complete: list[str]):
+    if len(complete) > 1:
+        for i in range(len(complete)):
+            yield complete[:i] + complete[i + 1 :]
 
 
 def main(
@@ -61,10 +69,17 @@ def main(
             vect_template, test_ids, test_template, features_names
         )
     used_features = []
-    for feature in X_train.keys():
+    best_f1_score = 0
+    last_change = None
+    random.shuffle(features_names)
+    for feature in itertools.cycle(features_names):
+        if feature == last_change:
+            break
+        if feature in used_features:
+            continue
         used_features.append(feature)
         run(X_train, y_train, classes, model_file, used_features)
-        f1_score = test(
+        new_f1_score = test(
             X_test,
             ids,
             model_file,
@@ -73,7 +88,34 @@ def main(
             stats_file,
             used_features,
         )
-        print(f1_score, "using:", ", ".join(used_features))
+        if new_f1_score > best_f1_score:
+            last_change = feature
+            best_f1_score = new_f1_score
+            print(f"F1-score={best_f1_score:0<.6}% using: {', '.join(used_features)}")
+            trim = "The best subset of features"
+            while trim is not None:
+                trim = None
+                for subset in get_subsets(used_features):
+                    run(X_train, y_train, classes, model_file, subset)
+                    new_f1_score = test(
+                        X_test,
+                        ids,
+                        model_file,
+                        test_data_dir,
+                        output_file,
+                        stats_file,
+                        subset,
+                    )
+                    if new_f1_score > best_f1_score:
+                        best_f1_score = new_f1_score
+                        trim = subset
+                if trim is not None:
+                    used_features = trim
+                    print(
+                        f"F1-score={best_f1_score:0<.6}% using: {', '.join(used_features)}"
+                    )
+        else:
+            used_features.remove(feature)
 
 
 if __name__ == "__main__":
