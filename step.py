@@ -123,7 +123,7 @@ def main(
         else:
             used_features.remove(feature)
     df = pd.DataFrame(steps, columns=[F1_COL, FEAT_COL])
-    df[F1_COL] = df[F1_COL].apply(lambda x: f"{x:0<.6}%")
+    df[F1_COL] = df[F1_COL].apply(lambda x: f"{x:0<7.6}%")
 
     def unify_parenthesis(elems: list[str]):
         keys = {}
@@ -135,7 +135,13 @@ def main(
         elems = []
         for key, group in keys.items():
             if len(group) > 1:
-                key + ", ".join(map(lambda x: x.split("(", 1)[1].strip("()"), group))
+                joined = (
+                    key
+                    + "("
+                    + ", ".join(map(lambda x: x.split("(", 1)[1].strip("()"), group))
+                    + ")"
+                )
+                elems.append(joined)
             else:
                 elems.append(group[0])
         return elems
