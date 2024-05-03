@@ -10,7 +10,7 @@ then
 
     # extract features
     echo "Extracting features"
-    rm -f features
+    rm -rf features
     mkdir -p features
     "$PYTHON" extract_features.py $BASEDIR/data/devel/ features/devel_{}.cod.cl > devel.cod
     "$PYTHON" extract_features.py $BASEDIR/data/train/ features/train_{}.cod.cl > train.cod
