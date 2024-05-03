@@ -139,7 +139,7 @@ class deptree:
     ## --------------------------------------------------------------
     ## get node offset
     def get_offset_span(self, n):
-        if n == 0:
+        if n == 0 or n is None:
             return -1, -1
         else:
             return self.tree.nodes[n]["start"], self.tree.nodes[n]["end"]

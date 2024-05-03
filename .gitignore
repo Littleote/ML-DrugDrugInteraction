@@ -14,4 +14,5 @@ tmp/*
 *.joblib
 *.out
 *.stats
+*.png
 .DS_Store

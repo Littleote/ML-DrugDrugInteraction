@@ -149,10 +149,17 @@ def row(txt):
     return txt + " " * (17 - len(txt))
 
 
-def print_statistics(gold, predicted):
-    print(row("") + "  tp\t  fp\t  fn\t#pred\t#exp\tP\tR\tF1")
+def print_statistics(gold, predicted, precision, redirect):
     print(
-        "------------------------------------------------------------------------------"
+        row("")
+        + "{1:>{0}}\t{2:>{0}}\t{3:>{0}}\t{4:>{0}}\t{5:>{0}}\t{6:{0}}\t{7:{0}}\t{8:{0}}".format(
+            precision, "tp", "fp", "fn", "npred", "nexp", "P", "R", "F1"
+        ),
+        file=redirect,
+    )
+    print(
+        "------------------------------------------------------------------------------",
+        file=redirect,
     )
     (nk, sP, sR, sF1) = (0, 0, 0, 0)
     for kind in sorted(gold):
@@ -161,37 +168,45 @@ def print_statistics(gold, predicted):
         (tp, fp, fn, npred, nexp, P, R, F1) = statistics(gold, predicted, kind)
         print(
             row(kind)
-            + "{:>4}\t{:>4}\t{:>4}\t{:>4}\t{:>4}\t{:2.1%}\t{:2.1%}\t{:2.1%}".format(
-                tp, fp, fn, npred, nexp, P, R, F1
-            )
+            + "{1:>{0}}\t{2:>{0}}\t{3:>{0}}\t{4:>{0}}\t{5:>{0}}\t{6:2.{9}%}\t{7:2.{9}%}\t{8:2.{9}%}".format(
+                precision, tp, fp, fn, npred, nexp, P, R, F1, precision - 3
+            ),
+            file=redirect,
         )
         (nk, sP, sR, sF1) = (nk + 1, sP + P, sR + R, sF1 + F1)
 
     (sP, sR, sF1) = (sP / nk, sR / nk, sF1 / nk)
     print(
-        "------------------------------------------------------------------------------"
+        "------------------------------------------------------------------------------",
+        file=redirect,
     )
     print(
         row("M.avg")
-        + "   -\t   -\t   -\t   -\t   -\t{:2.1%}\t{:2.1%}\t{:2.1%}".format(sP, sR, sF1)
+        + "{1: >{0}}\t{1: >{0}}\t{1: >{0}}\t{1: >{0}}\t{1: >{0}}\t{2:2.{5}%}\t{3:2.{5}%}\t{4:2.{5}%}".format(
+            precision, "-", sP, sR, sF1, precision - 3
+        ),
+        file=redirect,
     )
 
     print(
-        "------------------------------------------------------------------------------"
+        "------------------------------------------------------------------------------",
+        file=redirect,
     )
     (tp, fp, fn, npred, nexp, P, R, F1) = statistics(gold, predicted, "CLASS")
     print(
         row("m.avg")
-        + "{:>4}\t{:>4}\t{:>4}\t{:>4}\t{:>4}\t{:2.1%}\t{:2.1%}\t{:2.1%}".format(
-            tp, fp, fn, npred, nexp, P, R, F1
-        )
+        + "{1:>{0}}\t{2:>{0}}\t{3:>{0}}\t{4:>{0}}\t{5:>{0}}\t{6:2.{9}%}\t{7:2.{9}%}\t{8:2.{9}%}".format(
+            precision, tp, fp, fn, npred, nexp, P, R, F1, precision - 3
+        ),
+        file=redirect,
     )
     (tp, fp, fn, npred, nexp, P, R, F1) = statistics(gold, predicted, "NOCLASS")
     print(
         row("m.avg(no class)")
-        + "{:>4}\t{:>4}\t{:>4}\t{:>4}\t{:>4}\t{:2.1%}\t{:2.1%}\t{:2.1%}".format(
-            tp, fp, fn, npred, nexp, P, R, F1
-        )
+        + "{1:>{0}}\t{2:>{0}}\t{3:>{0}}\t{4:>{0}}\t{5:>{0}}\t{6:2.{9}%}\t{7:2.{9}%}\t{8:2.{9}%}".format(
+            precision, tp, fp, fn, npred, nexp, P, R, F1, precision - 3
+        ),
+        file=redirect,
     )
 
 
@@ -202,7 +217,7 @@ def print_statistics(gold, predicted):
 ## --
 
 
-def evaluate(task, golddir, outfile):
+def evaluate(task, golddir, outfile, imgfile, precision=4, redirect=sys.stdout):
     if task == "NER":
         # get set of expected entities in the whole golddir
         gold = load_gold_NER(golddir)
@@ -216,7 +231,51 @@ def evaluate(task, golddir, outfile):
     predicted = load_predicted(task, outfile)
 
     # compare both sets and compute statistics
-    print_statistics(gold, predicted)
+    print_statistics(gold, predicted, precision, redirect)
+    if imgfile is not None:
+        import seaborn as sns
+        import pandas as pd
+        from matplotlib import pyplot as plt
+
+        matrix = {
+            gk: {
+                pk: len(gvs.intersection(pvs))
+                for pk, pvs in predicted.items()
+                if pk not in ["CLASS", "NOCLASS"]
+            }
+            for gk, gvs in gold.items()
+            if gk not in ["CLASS", "NOCLASS"]
+        }
+        keys = sorted(list(matrix.keys()))
+
+        matrix["extra"] = {"missing": 0}
+        for pk, pvs in predicted.items():
+            if pk in ["CLASS", "NOCLASS"]:
+                continue
+            matrix["extra"][pk] = len(pvs) - sum(
+                [e.get(pk, 0) for e in matrix.values()]
+            )
+
+        for gk, gvs in gold.items():
+            if gk in ["CLASS", "NOCLASS"]:
+                continue
+            matrix[gk]["missing"] = len(gvs) - sum(matrix[gk].values())
+        matrix = (
+            pd.DataFrame(matrix)
+            .transpose()
+            .reindex(index=keys + ["extra"], columns=keys + ["missing"])
+        )
+        normalized = 100 * matrix.div(matrix.sum(axis="columns"), axis="index")
+        sns.heatmap(
+            normalized,
+            annot=matrix,
+            fmt="d",
+            vmin=0,
+            vmax=100,
+            cmap=plt.cm.Greens,
+            cbar_kws=dict(format="%d%%"),
+        )
+        plt.savefig(imgfile)
 
 
 ## --
@@ -227,12 +286,13 @@ def evaluate(task, golddir, outfile):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in [4, 5]:
         print("\n  Usage: evaluator.py (NER|DDI) golddir outfile\n")
         exit()
 
     task = sys.argv[1]
     golddir = sys.argv[2]
     outfile = sys.argv[3]
+    imgfile = sys.argv[4] if len(sys.argv) > 4 else None
 
-    evaluate(task, golddir, outfile)
+    evaluate(task, golddir, outfile, imgfile)
