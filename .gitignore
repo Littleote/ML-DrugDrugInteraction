@@ -3,6 +3,7 @@ __pycache__/*
 
 # Run configuration
 run.config
+run.sh
 
 # StanfordCore
 stanford-corenlp-*/*
